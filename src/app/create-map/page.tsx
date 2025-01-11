@@ -150,7 +150,7 @@ const CreateMapPage: React.FC = () => {
     // Increase separation to reduce node overlap
     const treeLayout = d3
       .tree()
-      .size([height, width - 300])
+      .size([height, width - 50])
       .separation((a, b) => {
         // Increase these numbers for more space
         return a.parent === b.parent ? 2.5 : 3.0;
@@ -160,7 +160,7 @@ const CreateMapPage: React.FC = () => {
 
     // OPTIONAL: Multiply x by a factor if you still see overlapping
     // (e.g., if you have many siblings and need more vertical spacing)
-    const xSpacingFactor = 1.2; // Increase as needed (e.g., 1.5, 2.0, etc.)
+    const xSpacingFactor = 6.0; // Increase as needed (e.g., 1.5, 2.0, etc.)
     root.each((d: any) => {
       d.x *= xSpacingFactor;
     });
