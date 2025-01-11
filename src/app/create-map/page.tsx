@@ -21,7 +21,7 @@ const CreateMapPage: React.FC = () => {
   };
 
   // Handle form submission (upload)
-  const handleSubmit = async (event: React.FormEvent) => {
+    const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
     if (!selectedFile) {
@@ -34,54 +34,49 @@ const CreateMapPage: React.FC = () => {
     formData.append('file', selectedFile);
 
     try {
-      // Send file to server
-      const res = await axios.post("http://127.0.0.1:8000/upload/", formData, {
+      // Upload file to server
+      const uploadResponse = await axios.post("http://127.0.0.1:8000/upload/", formData, {
         headers: {
-          'Content-Type': 'multipart/form-data'
-        }
+          'Content-Type': 'multipart/form-data',
+        },
       });
-      console.log("Server response:", res.data);
+      console.log("Upload response:", uploadResponse.data);
 
-      // Grab the processed data from the response
-      const processedData = res.data.data.processed_content;
-      setServerResponse(processedData);
+       // Fetch processed JSON data
+       const fileName = "sample.json"; // Ensure this file name matches the backend response
+       const secRes = await axios.get(`http://127.0.0.1:8000/get-json/${fileName}`);
+       const tree = buildTree(secRes.data);
+       renderMindMap(tree);
+     } catch (error) {
+       console.error("Error uploading file:", error);
+       alert("Upload failed. Check console for details.");
+     } finally {
+       setLoading(false);
+     }
+   };
+ 
+   function buildTree(data: any) {
+     const tree: any = [];
+     const lookup: any = {};
+ 
+     // Create a lookup object for quick access
+     data.forEach((item: any) => {
+       lookup[item.id] = { ...item, children: [] };
+     });
+ 
+     // Build the tree structure
+     data.forEach((item: any) => {
+       if (item.parent_id === null) {
+         tree.push(lookup[item.id]);
+       } else if (lookup[item.parent_id]) {
+         lookup[item.parent_id].children.push(lookup[item.id]);
+       }
+     });
+ 
+     return tree[0]; // Return the root node
+   }
+ 
 
-      // Build the data structure & render mind map
-      const tree = buildTree(processedData);
-      renderMindMap(tree);
-    } catch (error: any) {
-      console.error("Error uploading file:", error);
-      if (error.response && error.response.data && error.response.data.detail) {
-        alert(`Upload failed: ${error.response.data.detail}`);
-      } else {
-        alert("Upload failed. Please try again.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Convert flat data into hierarchical structure for d3
-  function buildTree(data: any) {
-    const tree: any = [];
-    const lookup: any = {};
-
-    // Create lookup
-    data.forEach((item: any) => {
-      lookup[item.id] = { ...item, children: [] };
-    });
-
-    // Build tree
-    data.forEach((item: any) => {
-      if (item.parent_id === null) {
-        tree.push(lookup[item.id]);
-      } else if (lookup[item.parent_id]) {
-        lookup[item.parent_id].children.push(lookup[item.id]);
-      }
-    });
-
-    return tree[0]; // Return the root node
-  }
 
   // Adjust text size based on length
   const getFontSize = (text: string) => {
