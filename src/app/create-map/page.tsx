@@ -5,6 +5,7 @@ import * as d3 from 'd3';
 import { motion } from 'framer-motion';
 import { AiOutlineUpload } from 'react-icons/ai';
 import { ClipLoader } from 'react-spinners';
+import { HierarchyLink } from 'd3';
 
 const CreateMapPage: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -88,7 +89,7 @@ const CreateMapPage: React.FC = () => {
 
   // Helper function to wrap long text in <text> elements
   const wrapText = (text: any, width: number) => {
-    text.each(function () {
+    text.each(function (this: SVGTextElement) {
       const textElement = d3.select(this);
       const words = textElement.text().split(/\s+/).reverse();
       let word: string | undefined;
@@ -135,7 +136,7 @@ const CreateMapPage: React.FC = () => {
       .select(d3Container.current)
       .attr('width', width)
       .attr('height', height)
-      .call(d3.zoom().on("zoom", (event) => {
+      .call(d3.zoom<SVGSVGElement, unknown>().on("zoom", (event) => {
         g.attr("transform", event.transform);
       }))
       .style('background', 'transparent');
@@ -170,7 +171,7 @@ const CreateMapPage: React.FC = () => {
       .attr("fill", "none")
       .attr("stroke", "#888")
       .attr("stroke-width", 2)
-      .attr("d", d3.linkHorizontal()
+      .attr("d", d3.linkHorizontal<HierarchyLink<any>, HierarchyLink<any>>()
         .x((d: any) => d.y)
         .y((d: any) => d.x)
       )
