@@ -1,11 +1,10 @@
 'use client';
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import * as d3 from 'd3';
-import { motion } from 'framer-motion';
-import { AiOutlineUpload } from 'react-icons/ai';
+import { motion, AnimatePresence } from 'framer-motion';
+import { AiOutlineUpload, AiOutlineSun, AiOutlineMoon } from 'react-icons/ai';
 import { ClipLoader } from 'react-spinners';
-import { HierarchyLink } from 'd3';
 
 const CreateMapPage: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -13,6 +12,7 @@ const CreateMapPage: React.FC = () => {
   const [serverResponse, setServerResponse] = useState<any>(null);
   const d3Container = useRef<SVGSVGElement | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
 
   // Handle file selection
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -22,7 +22,7 @@ const CreateMapPage: React.FC = () => {
   };
 
   // Handle form submission (upload)
-    const handleSubmit = async (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
     if (!selectedFile) {
@@ -42,42 +42,41 @@ const CreateMapPage: React.FC = () => {
         },
       });
       console.log("Upload response:", uploadResponse.data);
+      setServerResponse(uploadResponse.data);
 
-       // Fetch processed JSON data
-       const fileName = "sample.json"; // Ensure this file name matches the backend response
-       const secRes = await axios.get(`http://127.0.0.1:8000/get-json/${fileName}`);
-       const tree = buildTree(secRes.data);
-       renderMindMap(tree);
-     } catch (error) {
-       console.error("Error uploading file:", error);
-       alert("Upload failed. Check console for details.");
-     } finally {
-       setLoading(false);
-     }
-   };
- 
-   function buildTree(data: any) {
-     const tree: any = [];
-     const lookup: any = {};
- 
-     // Create a lookup object for quick access
-     data.forEach((item: any) => {
-       lookup[item.id] = { ...item, children: [] };
-     });
- 
-     // Build the tree structure
-     data.forEach((item: any) => {
-       if (item.parent_id === null) {
-         tree.push(lookup[item.id]);
-       } else if (lookup[item.parent_id]) {
-         lookup[item.parent_id].children.push(lookup[item.id]);
-       }
-     });
- 
-     return tree[0]; // Return the root node
-   }
- 
+      // Fetch processed JSON data
+      const fileName = "sample.json"; // Adjust if different in your backend
+      const secRes = await axios.get(`http://127.0.0.1:8000/get-json/${fileName}`);
+      const tree = buildTree(secRes.data);
+      renderMindMap(tree);
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      alert("Upload failed. Check console for details.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  function buildTree(data: any) {
+    const tree: any = [];
+    const lookup: any = {};
+
+    // Create a lookup object for quick access
+    data.forEach((item: any) => {
+      lookup[item.id] = { ...item, children: [] };
+    });
+
+    // Build the tree structure
+    data.forEach((item: any) => {
+      if (item.parent_id === null) {
+        tree.push(lookup[item.id]);
+      } else if (lookup[item.parent_id]) {
+        lookup[item.parent_id].children.push(lookup[item.id]);
+      }
+    });
+
+    return tree[0]; // Return the root node
+  }
 
   // Adjust text size based on length
   const getFontSize = (text: string) => {
@@ -89,7 +88,7 @@ const CreateMapPage: React.FC = () => {
 
   // Helper function to wrap long text in <text> elements
   const wrapText = (text: any, width: number) => {
-    text.each(function (this: SVGTextElement) {
+    text.each(function () {
       const textElement = d3.select(this);
       const words = textElement.text().split(/\s+/).reverse();
       let word: string | undefined;
@@ -98,7 +97,8 @@ const CreateMapPage: React.FC = () => {
       const y = textElement.attr("y");
       const x = textElement.attr("x");
       const dy = parseFloat(textElement.attr("dy"));
-      let tspan = textElement.text(null)
+      let tspan = textElement
+        .text(null)
         .append("tspan")
         .attr("x", x)
         .attr("y", y)
@@ -111,7 +111,8 @@ const CreateMapPage: React.FC = () => {
           line.pop();
           tspan.text(line.join(" "));
           line = [word];
-          tspan = textElement.append("tspan")
+          tspan = textElement
+            .append("tspan")
             .attr("x", x)
             .attr("y", y)
             .attr("dy", lineHeight + "em")
@@ -136,26 +137,53 @@ const CreateMapPage: React.FC = () => {
       .select(d3Container.current)
       .attr('width', width)
       .attr('height', height)
-      .call(d3.zoom<SVGSVGElement, unknown>().on("zoom", (event) => {
-        g.attr("transform", event.transform);
-      }))
+      .call(
+        d3.zoom().on("zoom", (event) => {
+          g.attr("transform", event.transform);
+        })
+      )
       .style('background', 'transparent');
 
     const g = svg.append("g");
     const root = d3.hierarchy(data);
-    const treeLayout = d3.tree().size([height, width - 300]);
+
+    // Increase separation to reduce node overlap
+    const treeLayout = d3
+      .tree()
+      .size([height, width - 300])
+      .separation((a, b) => {
+        // Increase these numbers for more space
+        return a.parent === b.parent ? 2.5 : 3.0;
+      });
+
     treeLayout(root);
 
+    // OPTIONAL: Multiply x by a factor if you still see overlapping
+    // (e.g., if you have many siblings and need more vertical spacing)
+    const xSpacingFactor = 1.2; // Increase as needed (e.g., 1.5, 2.0, etc.)
+    root.each((d: any) => {
+      d.x *= xSpacingFactor;
+    });
+
+    // Define colors based on theme
+    const linkColor = theme === 'light' ? '#717171' : '#888';
+    const nodeStroke = theme === 'light' ? '#ccc' : '#222';
+    const textColor = theme === 'light' ? '#222' : '#fff';
+
     // Node gradient background
-    svg.append("defs")
+    svg
+      .append("defs")
       .append("linearGradient")
       .attr("id", "gradientNode")
-      .attr("x1", "0%").attr("y1", "0%")
-      .attr("x2", "100%").attr("y2", "100%")
+      .attr("x1", "0%")
+      .attr("y1", "0%")
+      .attr("x2", "100%")
+      .attr("y2", "100%")
       .selectAll("stop")
       .data([
-        { offset: "0%", color: "#6dd5ed" },
-        { offset: "100%", color: "#2193b0" }
+        // Soft pastel inspiration for light theme
+        { offset: "0%", color: theme === 'light' ? "#f093fb" : "#6dd5ed" },
+        { offset: "100%", color: theme === 'light' ? "#f5576c" : "#2193b0" }
       ])
       .enter()
       .append("stop")
@@ -163,25 +191,32 @@ const CreateMapPage: React.FC = () => {
       .attr("stop-color", (d) => d.color);
 
     // Draw links
-    g.selectAll(".link")
+    g
+      .selectAll(".link")
       .data(root.links())
       .enter()
       .append("path")
       .attr("class", "link")
       .attr("fill", "none")
-      .attr("stroke", "#888")
-      .attr("stroke-width", 2)
-      .attr("d", d3.linkHorizontal<HierarchyLink<any>, HierarchyLink<any>>()
-        .x((d: any) => d.y)
-        .y((d: any) => d.x)
+      .attr("stroke", linkColor)
+      .attr("stroke-width", 2.5)
+      .attr("stroke-linecap", "round")
+      .attr(
+        "d",
+        d3
+          .linkHorizontal()
+          .x((d: any) => d.y)
+          .y((d: any) => d.x) as any
       )
       .attr("opacity", 0)
       .transition()
-      .duration(800)
+      .duration(1000)
+      .ease(d3.easeCubicInOut)
       .attr("opacity", 1);
 
     // Draw nodes
-    const node = g.selectAll(".node")
+    const node = g
+      .selectAll(".node")
       .data(root.descendants())
       .enter()
       .append("g")
@@ -202,63 +237,199 @@ const CreateMapPage: React.FC = () => {
       });
 
     // Node circles
-    node.append("circle")
+    node
+      .append("circle")
       .attr("r", 10)
       .attr("fill", "url(#gradientNode)")
-      .attr("stroke", "#222")
+      .attr("stroke", nodeStroke)
       .attr("stroke-width", 2)
       .attr("opacity", 0)
       .transition()
-      .duration(600)
+      .duration(800)
+      .ease(d3.easeCubicInOut)
       .attr("opacity", 1);
 
-    // Node labels
-    node.append("text")
+    // Text labels
+    node
+      .append("text")
       .attr("dy", ".35em")
-      .attr("x", (d: any) => (d.children ? -15 : 15))
+      // Offset text more so it doesn't collide with the circle
+      .attr("x", (d: any) => (d.children ? -18 : 18))
       .attr("text-anchor", (d: any) => (d.children ? "end" : "start"))
       .attr("font-size", (d: any) => getFontSize(d.data.name))
-      .attr("fill", "#fff")
+      .attr("fill", textColor)
       .attr("opacity", 0)
       .text((d: any) => d.data.name)
-      .call(wrapText, 140)
+      .call(wrapText, 150)
       .transition()
-      .delay(600)
+      .delay(800)
+      .duration(800)
+      .ease(d3.easeCubicInOut)
       .attr("opacity", 1);
+
+    // Optional: Insert a subtle rectangle behind the text for readability
+    node.each(function () {
+      const group = d3.select(this);
+      const text = group.select("text");
+      const bbox = (text.node() as SVGTextElement).getBBox();
+
+      // Insert rectangle *before* the text element in the DOM
+      group
+        .insert("rect", "text")
+        .attr("x", bbox.x - 6)
+        .attr("y", bbox.y - 3)
+        .attr("width", bbox.width + 12)
+        .attr("height", bbox.height + 6)
+        .attr("rx", 4)
+        .attr("ry", 4)
+        .attr("fill", theme === 'light' ? '#ffffffcc' : '#000000cc')
+        .attr("stroke", nodeStroke)
+        .attr("stroke-width", 0.3)
+        .attr("opacity", 0)
+        .transition()
+        .duration(800)
+        .ease(d3.easeCubicInOut)
+        .attr("opacity", 1);
+    });
   };
 
+  // Update mind map when theme changes
+  useEffect(() => {
+    if (serverResponse) {
+      const fileName = "sample.json"; // Adjust if different in your backend
+      axios
+        .get(`http://127.0.0.1:8000/get-json/${fileName}`)
+        .then((secRes) => {
+          const tree = buildTree(secRes.data);
+          renderMindMap(tree);
+        })
+        .catch((error) => {
+          console.error("Error fetching JSON data:", error);
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [theme]);
+
+  // Persist theme preference
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null;
+    if (savedTheme === 'light' || savedTheme === 'dark') {
+      setTheme(savedTheme);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
   return (
-    <div className="relative min-h-screen w-full bg-black overflow-hidden">
+    <div
+      className={`relative min-h-screen w-full overflow-hidden transition-colors duration-500 ${
+        theme === 'light' ? 'bg-white' : 'bg-black'
+      }`}
+    >
+      {/* Theme Toggle Button */}
+      <div className="absolute top-4 right-4 z-20">
+        <button
+          onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+          className={`p-2 rounded-full transition-colors duration-300 ${
+            theme === 'light'
+              ? 'bg-gray-200 hover:bg-gray-300'
+              : 'bg-white/20 hover:bg-white/30'
+          }`}
+        >
+          {theme === 'light' ? (
+            <AiOutlineMoon size={24} className="text-yellow-500" />
+          ) : (
+            <AiOutlineSun size={24} className="text-yellow-300" />
+          )}
+        </button>
+      </div>
+
       {/* Animated swirling background gradient */}
+      <AnimatePresence>
+        {theme === 'dark' ? (
+          <motion.div
+            key="dark-background"
+            className="absolute inset-0 bg-gradient-to-r from-[#0f0c29] via-[#302b63] to-[#24243e]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 2, ease: "easeOut" }}
+          />
+        ) : (
+          /* Modern, neutral gradient for Light theme */
+          <motion.div
+            key="light-background"
+            className="absolute inset-0 bg-gradient-to-r from-[#fdfcfb] via-[#f6f7f8] to-[#ebedee]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 2, ease: "easeOut" }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Floating blobs with increased visibility */}
+      {/* Top-left Blob */}
       <motion.div
-        className="absolute inset-0 bg-gradient-to-r from-[#0f0c29] via-[#302b63] to-[#24243e]"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 2, ease: "easeOut" }}
-      />
-      {/* Floating blob top-left */}
-      <motion.div
-        className="absolute w-96 h-96 rounded-full bg-purple-800 filter blur-3xl opacity-20 top-[-5rem] left-[-5rem]"
+        className={`absolute w-96 h-96 rounded-full filter blur-3xl opacity-40 top-[-5rem] left-[-5rem] transition-colors duration-500 ${
+          theme === 'light' ? 'bg-pink-300' : 'bg-purple-800'
+        }`}
         animate={{
           y: [0, 40, 0],
           x: [0, 40, 0],
         }}
         transition={{
-          duration: 8,
+          duration: 12,
           repeat: Infinity,
           repeatType: "reverse",
           ease: "easeInOut",
         }}
       />
-      {/* Floating blob bottom-right */}
+      {/* Bottom-right Blob */}
       <motion.div
-        className="absolute w-96 h-96 rounded-full bg-indigo-700 filter blur-3xl opacity-20 bottom-[-5rem] right-[-5rem]"
+        className={`absolute w-96 h-96 rounded-full filter blur-3xl opacity-40 bottom-[-5rem] right-[-5rem] transition-colors duration-500 ${
+          theme === 'light' ? 'bg-blue-300' : 'bg-indigo-700'
+        }`}
         animate={{
           y: [0, -40, 0],
           x: [0, -40, 0],
         }}
         transition={{
-          duration: 8,
+          duration: 12,
+          repeat: Infinity,
+          repeatType: "reverse",
+          ease: "easeInOut",
+        }}
+      />
+      {/* Top-right Blob */}
+      <motion.div
+        className={`absolute w-96 h-96 rounded-full filter blur-3xl opacity-40 top-[-8rem] right-[-8rem] transition-colors duration-500 ${
+          theme === 'light' ? 'bg-indigo-300' : 'bg-pink-800'
+        }`}
+        animate={{
+          y: [0, 30, 0],
+          x: [0, 30, 0],
+        }}
+        transition={{
+          duration: 15,
+          repeat: Infinity,
+          repeatType: "reverse",
+          ease: "easeInOut",
+        }}
+      />
+      {/* Bottom-left Blob */}
+      <motion.div
+        className={`absolute w-96 h-96 rounded-full filter blur-3xl opacity-40 bottom-[-8rem] left-[-8rem] transition-colors duration-500 ${
+          theme === 'light' ? 'bg-green-300' : 'bg-green-800'
+        }`}
+        animate={{
+          y: [0, -30, 0],
+          x: [0, 30, 0],
+        }}
+        transition={{
+          duration: 15,
           repeat: Infinity,
           repeatType: "reverse",
           ease: "easeInOut",
@@ -266,18 +437,24 @@ const CreateMapPage: React.FC = () => {
       />
 
       <div className="relative z-10 container mx-auto py-12 px-4 flex flex-col items-center">
-        {/* Card container with glassmorphism */}
+        {/* Card container with glass morphism */}
         <motion.div
-          initial={{ scale: 0.9, y: 50, opacity: 0 }}
+          initial={{ scale: 0.95, y: 50, opacity: 0 }}
           animate={{ scale: 1, y: 0, opacity: 1 }}
-          transition={{ duration: 1.2, ease: "easeOut" }}
-          className="w-full max-w-4xl bg-white/10 backdrop-blur-lg shadow-2xl rounded-3xl p-8 border border-white/10"
+          transition={{ duration: 1.5, ease: "easeOut" }}
+          className={`w-full max-w-4xl backdrop-blur-lg shadow-2xl rounded-3xl p-8 border transition-colors duration-500 ${
+            theme === 'light'
+              ? 'bg-white/60 border-gray-200'
+              : 'bg-white/10 border-white/10'
+          }`}
         >
           <motion.h1
-            className="text-4xl font-extrabold mb-6 text-center text-white drop-shadow-lg"
+            className={`text-4xl font-extrabold mb-6 text-center transition-colors duration-500 ${
+              theme === 'light' ? 'text-gray-800' : 'text-white'
+            } drop-shadow-lg`}
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1, ease: "easeOut" }}
+            transition={{ duration: 1.2, ease: "easeOut" }}
           >
             Interactive Mind Map
           </motion.h1>
@@ -288,20 +465,40 @@ const CreateMapPage: React.FC = () => {
             className="space-y-6"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1, ease: "easeOut" }}
+            transition={{ duration: 1.2, ease: "easeOut" }}
           >
             {/* File Drop/Select Area */}
-            <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-white/20 rounded-xl cursor-pointer hover:border-white/50 transition-colors duration-300 bg-black/20">
-              <div className="flex flex-col items-center text-white/80 p-4">
-                <AiOutlineUpload size={50} className="text-white/50" />
+            <label
+              className={`flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-xl cursor-pointer transition-colors duration-300 backdrop-blur-md ${
+                theme === 'light'
+                  ? 'border-gray-300 bg-white/40 hover:border-gray-400'
+                  : 'border-white/20 bg-black/20 hover:border-white/50'
+              }`}
+            >
+              <div className="flex flex-col items-center text-center p-4">
+                <AiOutlineUpload
+                  size={50}
+                  className={`mb-4 transition-colors duration-500 ${
+                    theme === 'light' ? 'text-gray-600' : 'text-white/50'
+                  }`}
+                />
                 {!selectedFile ? (
-                  <span className="mt-4 font-medium text-sm leading-5 text-center">
+                  <span
+                    className={`font-medium text-sm leading-5 transition-colors duration-500 ${
+                      theme === 'light' ? 'text-gray-700' : 'text-white/80'
+                    }`}
+                  >
                     Drag & Drop your file here <br /> or{" "}
                     <span className="underline">click to browse</span>
                   </span>
                 ) : (
-                  <span className="mt-4 text-sm font-semibold">
-                    File selected: <span className="text-pink-300">{selectedFile.name}</span>
+                  <span
+                    className={`text-sm font-semibold transition-colors duration-500 ${
+                      theme === 'light' ? 'text-gray-800' : 'text-pink-300'
+                    }`}
+                  >
+                    File selected:{" "}
+                    <span className="font-medium">{selectedFile.name}</span>
                   </span>
                 )}
                 <input
@@ -316,7 +513,7 @@ const CreateMapPage: React.FC = () => {
             <div className="flex justify-center">
               <button
                 type="submit"
-                className={`flex items-center px-8 py-3 font-bold rounded-xl transition-all duration-300 text-white 
+                className={`flex items-center px-8 py-3 font-bold rounded-xl transition-all duration-500 text-white 
                   ${
                     loading
                       ? "bg-gray-700 cursor-not-allowed"
@@ -354,15 +551,27 @@ const CreateMapPage: React.FC = () => {
           {/* Server Response */}
           {serverResponse && (
             <motion.div
-              className="mt-6 bg-black/30 border border-white/10 rounded-xl p-4 shadow-md max-h-60 overflow-auto"
+              className={`mt-6 rounded-xl p-4 shadow-md max-h-60 overflow-auto transition-colors duration-500 ${
+                theme === 'light'
+                  ? 'bg-white/50 border border-gray-200'
+                  : 'bg-black/30 border border-white/10'
+              }`}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
+              transition={{ duration: 1, ease: "easeOut" }}
             >
-              <h2 className="text-lg font-bold text-white/90 mb-2">
+              <h2
+                className={`text-lg font-bold mb-2 transition-colors duration-500 ${
+                  theme === 'light' ? 'text-gray-800' : 'text-white/90'
+                }`}
+              >
                 Server Response
               </h2>
-              <pre className="text-sm text-white/80 whitespace-pre-wrap break-words">
+              <pre
+                className={`text-sm whitespace-pre-wrap break-words transition-colors duration-500 ${
+                  theme === 'light' ? 'text-gray-700' : 'text-white/80'
+                }`}
+              >
                 {JSON.stringify(serverResponse, null, 2)}
               </pre>
             </motion.div>
@@ -371,16 +580,26 @@ const CreateMapPage: React.FC = () => {
           {/* Tooltip for Mind Map Nodes */}
           <div
             ref={tooltipRef}
-            className="absolute pointer-events-none bg-gray-800 text-white text-xs rounded py-1 px-2 opacity-0 transition-opacity duration-300 z-50"
-            style={{ position: 'absolute' }}
+            className="absolute pointer-events-none text-xs rounded py-1 px-2 opacity-0 transition-opacity duration-300 z-50"
+            style={{
+              position: 'absolute',
+              backgroundColor: theme === 'light' ? '#f9f9f9' : '#333',
+              color: theme === 'light' ? '#222' : '#fff',
+              backdropFilter: 'blur(4px)',
+              padding: '4px 8px',
+            }}
           ></div>
 
           {/* D3 Mind Map Container */}
           <motion.div
-            className="mt-8 w-full h-96 relative rounded-xl overflow-hidden border border-white/10 bg-black/30"
+            className={`mt-8 w-full h-96 relative rounded-xl overflow-hidden border transition-colors duration-500 ${
+              theme === 'light'
+                ? 'border-gray-200 bg-white/40 backdrop-blur-md'
+                : 'border-white/10 bg-black/30'
+            }`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 1, ease: "easeOut" }}
+            transition={{ duration: 1.2, ease: "easeOut" }}
           >
             <svg ref={d3Container} className="w-full h-full" />
           </motion.div>
